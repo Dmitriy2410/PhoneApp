@@ -1,0 +1,4 @@
+*.pro.user
+.directory
+*.directory
+*.vscode
