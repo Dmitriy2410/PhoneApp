@@ -3,6 +3,7 @@
 
 #include <QMainWindow>
 #include "phoneclient.h"
+#include "diasettings.h"
 
 namespace Ui {
 	class MainWindow;
@@ -32,6 +33,7 @@ private:
 	RecordModel		*m_recordModel;
 	SortModel		*m_sortModel;
 	PhoneClient		m_phoneClient;
+	DiaSettings		m_setting;
 	Ui::MainWindow	*ui;
 };
 #endif // MAINWINDOW_H

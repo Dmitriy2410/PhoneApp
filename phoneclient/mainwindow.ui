@@ -85,9 +85,15 @@
          </item>
          <item>
           <widget class="QProgressBar" name="progressBar">
+           <property name="minimumSize">
+            <size>
+             <width>50</width>
+             <height>0</height>
+            </size>
+           </property>
            <property name="maximumSize">
             <size>
-             <width>150</width>
+             <width>50</width>
              <height>15</height>
             </size>
            </property>

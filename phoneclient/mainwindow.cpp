@@ -1,5 +1,4 @@
 #include "mainwindow.h"
-#include "diasettings.h"
 #include "dianewrecord.h"
 #include "QMessageBox"
 #include "recordmodel.h"
@@ -34,6 +33,7 @@ MainWindow::MainWindow(QWidget *parent)
 	connect(&m_phoneClient, SIGNAL(sigShowMessage(QString)),
 			this, SLOT(slotShowMessage(QString)));
 	ui->tv_records->setSortingEnabled(true);
+	m_setting.hide();
 }
 
 MainWindow::~MainWindow()
@@ -82,10 +82,9 @@ void MainWindow::slotEditRecord(const QModelIndex &index)
 
 void MainWindow::slotSettings()
 {
-	DiaSettings dia(this);
-	if (dia.exec() == QDialog::Accepted) {
-		m_phoneClient.setAddr(dia.getAddr());
-		m_phoneClient.setPort(dia.getPort());
+	if (m_setting.exec() == QDialog::Accepted) {
+		m_phoneClient.setAddr(m_setting.getAddr());
+		m_phoneClient.setPort(m_setting.getPort());
 	}
 }
 
