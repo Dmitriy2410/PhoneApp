@@ -7,6 +7,11 @@ enum DBState {
 	DBError = -1,
 	DBReady = 0
 };
+enum ReadState {
+	WaitSize,
+	WaitDoc,
+	WaitBlob
+};
 
 #pragma pack(push, 1)
 struct Record

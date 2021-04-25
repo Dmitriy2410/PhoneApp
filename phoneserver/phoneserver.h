@@ -5,10 +5,22 @@
 #include <QObject>
 #include "../global.h"
 #include "datajson.h"
+#include <QJsonObject>
 
 class QTcpServer;
 class QTcpSocket;
 class QNetworkSession;
+
+struct SockData {
+	SockData() {
+		m_waitState = WaitSize;
+	}
+	qint32		m_jsonSize;
+	QByteArray	m_readBuffer;
+	QJsonObject	m_jsonObj;
+	QByteArray	m_blob;
+	int			m_waitState;
+};
 
 class PhoneServer : public QObject
 {
@@ -30,10 +42,12 @@ private:
 private slots:
 	void slotNewConnection();
 	void slotReadyRead();
+	void slotDisconnected();
 
 private:
-	QTcpServer	*m_server;
-	DataJson	m_dataJson;
+	QHash<QTcpSocket*, SockData>	m_sockData;
+	QTcpServer						*m_server;
+	DataJson						m_dataJson;
 };
 
 #endif // SERVER_H

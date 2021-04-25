@@ -9,6 +9,7 @@ const int gc_interval = 1000;
 PhoneClient::PhoneClient()
 {
 	m_timer.setInterval(gc_interval);
+	m_timer.setSingleShot(true);
 	connect(&m_socket, SIGNAL(connected()),
 			this, SLOT(slotConnected()));
 	connect(&m_socket, SIGNAL(disconnected()),
@@ -34,6 +35,7 @@ PhoneClient::PhoneClient()
 	m_port = 1234;
 	m_socket.connectToHost(m_addr, m_port);
 	m_state = WaitRequest;
+	m_waitState = WaitSize;
 }
 
 void PhoneClient::getState()
@@ -66,6 +68,7 @@ void PhoneClient::addRecord(const Record &rec)
 		return;
 	}
 	buf.close();
+	obj["blobSize"] = ba.size();
 	send(obj, ba);
 }
 
@@ -86,6 +89,7 @@ void PhoneClient::setRecord(int id, const Record &rec)
 		return;
 	}
 	buf.close();
+	obj["blobSize"] = ba.size();
 	send(obj, ba);
 }
 
@@ -111,9 +115,11 @@ void PhoneClient::send(const QJsonObject &obj, const QByteArray &blob)
 	QByteArray jsonData = QJsonDocument(obj).toBinaryData();
 	qint32 jsonSize = jsonData.size();
 	QByteArray ba;
-	ba.resize(sizeof(qint32) + jsonSize);
-	QDataStream ds(&ba, QIODevice::WriteOnly);
-	ds << jsonSize << jsonData << blob;
+	ba.resize(sizeof(qint32));
+	QDataStream stream(&ba, QIODevice::WriteOnly);
+	stream << jsonSize;
+	ba.append(jsonData);
+	ba.append(blob);
 	m_state = WaitRequest;
 	m_socket.write(ba);
 	m_socket.flush();
@@ -122,7 +128,7 @@ void PhoneClient::send(const QJsonObject &obj, const QByteArray &blob)
 void PhoneClient::slotConnected()
 {
 	m_state = Ready;
-	getState();
+	getData();
 	emit sigConnected();
 }
 
@@ -168,24 +174,43 @@ void PhoneClient::updateConnection()
 
 void PhoneClient::slotReadyRead()
 {
-	m_state = Ready;
-	qint32 jsonSize;
-	QByteArray ba;
-	int count = 0;
 	while(m_socket.bytesAvailable()) {
-		ba.append(m_socket.readAll());
-		count++;
+		QByteArray ba = m_socket.readAll();
+		m_readBuffer.append(ba);
+		switch (m_waitState) {
+		case WaitSize: {
+			if (m_readBuffer.size() < 4) {
+				return;
+			}
+			QDataStream ds(&m_readBuffer, QIODevice::ReadOnly);
+			ds >> m_jsonSize;
+			m_waitState = WaitDoc;
+		}
+		// fall through
+		case WaitDoc: {
+			if (m_readBuffer.size() < (m_jsonSize + 4)) {
+				return;
+			}
+			QByteArray jsonDoc;
+			jsonDoc.resize(m_jsonSize);
+			jsonDoc = m_readBuffer.mid(4, m_jsonSize);
+			m_jsonObj = QJsonDocument::fromBinaryData(jsonDoc).object();
+			m_blob.resize(m_jsonObj["blobSize"].toInt(0));
+			m_waitState = WaitBlob;
+		}
+		// fall through
+		case WaitBlob: {
+			if (m_readBuffer.size() < (m_jsonSize + 4 + m_blob.size())) {
+				return;
+			}
+			m_blob = m_readBuffer.mid(4 + m_jsonSize, m_blob.size());
+			m_state = Ready;
+			m_waitState = WaitSize;
+			m_readBuffer.clear();
+		}
+		}
 	}
-	QDataStream ds(&ba, QIODevice::ReadOnly);
-	ds >> jsonSize;
-	QByteArray jsonDoc;
-	jsonDoc.resize(jsonSize);
-	ds >> jsonDoc;
-	QByteArray blob;
-	blob.resize(ba.size() - (sizeof(qint32) + jsonSize));
-	ds >> blob;
-	QJsonObject obj = QJsonDocument::fromBinaryData(jsonDoc).object();
-	requestHandler(obj, blob);
+	requestHandler(m_jsonObj, m_blob);
 }
 
 void PhoneClient::requestHandler(const QJsonObject &obj, const QByteArray &blob)
@@ -196,7 +221,10 @@ void PhoneClient::requestHandler(const QJsonObject &obj, const QByteArray &blob)
 	}
 	QString cmd = obj["cmd"].toString();
 	if (cmd == "GetState") {
-		setLastMod(obj["LastMod"].toInt());
+		int lastMod = obj["LastMod"].toInt();
+		if (lastMod != m_lastMod) {
+			getData();
+		}
 	} else if (cmd == "GetData") {
 		prepareDB(obj, blob);
 	} else if (cmd == "SetRecord" ||
@@ -209,17 +237,10 @@ void PhoneClient::requestHandler(const QJsonObject &obj, const QByteArray &blob)
 	m_timer.start();
 }
 
-void PhoneClient::setLastMod(qint64 mod)
-{
-	if (mod != m_lastMod) {
-		m_lastMod = mod;
-		getData();
-	}
-}
-
 void PhoneClient::prepareDB(const QJsonObject &obj, const QByteArray &blob)
 {
 	QBuffer buf;
+	m_lastMod = obj["LastMod"].toInt();
 	int recSize = obj["RecSize"].toInt();
 	buf.setData(blob);
 	buf.open(QIODevice::ReadOnly);

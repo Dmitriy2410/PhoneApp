@@ -27,7 +27,6 @@ public:
 private:
 	void send(const QJsonObject &obj, const QByteArray &blob);
 	void requestHandler(const QJsonObject &obj, const QByteArray &blob);
-	void setLastMod(qint64 mod);
 	void prepareDB(const QJsonObject &obj, const QByteArray &blob);
 	void getData();
 	void updateConnection();
@@ -53,6 +52,12 @@ private:
 	QString		m_addr;
 	int			m_port;
 	int			m_state;
+	// read
+	qint32		m_jsonSize;
+	QByteArray	m_readBuffer;
+	QJsonObject	m_jsonObj;
+	QByteArray	m_blob;
+	int			m_waitState;
 };
 
 #endif // PHONECLIENT_H

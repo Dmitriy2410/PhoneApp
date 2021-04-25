@@ -41,35 +41,63 @@ void PhoneServer::slotNewConnection()
 	if (!sock) {
 		return;
 	}
-	qDebug()<<"New connection:"<<sock->peerAddress().toString();
-	connect(sock, &QTcpSocket::disconnected,
-			this, [=]
-	{
-		qDebug()<<"Destroy connection:"<<sock->peerAddress().toString();
-		sock->deleteLater();
-	});
+	connect(sock, SIGNAL(disconnected()),
+			this, SLOT(slotDisconnected()));
+	connect(sock, SIGNAL(disconnected()),
+			sock, SLOT(deleteLater()));
 	connect(sock, SIGNAL(readyRead()),
 			this, SLOT(slotReadyRead()));
+	qDebug()<<"New connection:"<<sock->peerAddress().toString();
 }
+
+void PhoneServer::slotDisconnected()
+{
+	QTcpSocket *sock = static_cast<QTcpSocket*>(sender());
+	qDebug()<<"Destroy connection:"<<sock->peerAddress().toString();
+	m_sockData.remove(sock);
+}
+
 
 void PhoneServer::slotReadyRead()
 {
 	QTcpSocket *sock = static_cast<QTcpSocket*>(sender());
-	qint32 jsonSize;
-	QByteArray ba;
+	SockData &sData = m_sockData[sock];
 	while(sock->bytesAvailable()) {
-		ba.append(sock->readAll());
+		QByteArray ba = sock->readAll();
+		sData.m_readBuffer.append(ba);
+		switch (sData.m_waitState) {
+		case WaitSize: {
+			if (sData.m_readBuffer.size() < 4) {
+				return;
+			}
+			QDataStream ds(&sData.m_readBuffer, QIODevice::ReadOnly);
+			ds >> sData.m_jsonSize;
+			sData.m_waitState = WaitDoc;
+		}
+		// fall through
+		case WaitDoc: {
+			if (sData.m_readBuffer.size() < (sData.m_jsonSize + 4)) {
+				return;
+			}
+			QByteArray jsonDoc;
+			jsonDoc.resize(sData.m_jsonSize);
+			jsonDoc = sData.m_readBuffer.mid(4, sData.m_jsonSize);
+			sData.m_jsonObj = QJsonDocument::fromBinaryData(jsonDoc).object();
+			sData.m_blob.resize(sData.m_jsonObj["blobSize"].toInt(0));
+			sData.m_waitState = WaitBlob;
+		}
+		// fall through
+		case WaitBlob: {
+			if (sData.m_readBuffer.size() < (sData.m_jsonSize + 4 + sData.m_blob.size())) {
+				return;
+			}
+			sData.m_blob = sData.m_readBuffer.mid(4 + sData.m_jsonSize, sData.m_blob.size());
+			sData.m_waitState = WaitSize;
+			sData.m_readBuffer.clear();
+		}
+		}
 	}
-	QDataStream ds(&ba, QIODevice::ReadOnly);
-	ds >> jsonSize;
-	QByteArray jsonDoc;
-	jsonDoc.resize(jsonSize);
-	ds >> jsonDoc;
-	QByteArray blob;
-	blob.resize(ba.size() - (sizeof(qint32) + jsonSize));
-	ds >> blob;
-	QJsonObject obj = QJsonDocument::fromBinaryData(jsonDoc).object();
-	prepareRequest(sock, obj, blob);
+	prepareRequest(sock, sData.m_jsonObj, sData.m_blob);
 }
 
 void PhoneServer::prepareRequest(QTcpSocket *sock, const QJsonObject &obj, const QByteArray &blob)
@@ -117,6 +145,7 @@ void PhoneServer::prepareGetData(QTcpSocket *sock)
 	reqObj["cmd"] = "GetData";
 	reqObj["State"] = DBReady;
 	reqObj["RecSize"] = recs.size();
+	reqObj["LastMod"] = m_dataJson.lastModified();
 	reqBlob.resize(recs.size() * sizeof(Record));
 	QBuffer buf(&reqBlob);
 	buf.open(QIODevice::WriteOnly);
@@ -127,13 +156,13 @@ void PhoneServer::prepareGetData(QTcpSocket *sock)
 		}
 	}
 	buf.close();
+	reqObj["blobSize"] = reqBlob.size();
 	request(sock, reqObj, reqBlob);
 }
 
 void PhoneServer::prepareSetRecord(QTcpSocket *sock, int id, const QByteArray &blob)
 {
 	QJsonObject reqObj;
-	QByteArray reqBlob;
 	reqObj["cmd"] = "SetRecord";
 	QBuffer buf;
 	Record rec;
@@ -157,13 +186,12 @@ void PhoneServer::prepareSetRecord(QTcpSocket *sock, int id, const QByteArray &b
 		reqObj["State"] = DBError;
 	}
 	buf.close();
-	request(sock, reqObj, reqBlob);
+	request(sock, reqObj, QByteArray());
 }
 
 void PhoneServer::prepareAddRecord(QTcpSocket *sock, const QByteArray &blob)
 {
 	QJsonObject reqObj;
-	QByteArray reqBlob;
 	QBuffer buf;
 	Record rec;
 	buf.setData(blob);
@@ -180,7 +208,7 @@ void PhoneServer::prepareAddRecord(QTcpSocket *sock, const QByteArray &blob)
 		reqObj["State"] = DBError;
 	}
 	buf.close();
-	request(sock, reqObj, reqBlob);
+	request(sock, reqObj, QByteArray());
 }
 
 void PhoneServer::prepareRmRecord(QTcpSocket *sock, const QList<int> &ids)
@@ -203,8 +231,11 @@ void PhoneServer::request(QTcpSocket *sock, const QJsonObject &obj, const QByteA
 	QByteArray jsonData = QJsonDocument(obj).toBinaryData();
 	qint32 jsonSize = jsonData.size();
 	QByteArray ba;
-	ba.resize(sizeof(qint32) + jsonSize + blob.size());
+	ba.resize(sizeof(qint32));
 	QDataStream stream(&ba, QIODevice::WriteOnly);
-	stream << jsonSize << jsonData << blob;
+	stream << jsonSize;
+	ba.append(jsonData);
+	ba.append(blob);
 	sock->write(ba);
+	sock->flush();
 }
