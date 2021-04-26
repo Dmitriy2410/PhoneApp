@@ -37,6 +37,7 @@ private slots:
 	void slotErrorHandler(QAbstractSocket::SocketError error);
 	void slotReadyRead();
 	void slotTimeout();
+	void slotReqTimeout();
 	void getState();
 
 signals:
@@ -48,6 +49,7 @@ signals:
 private:
 	QTcpSocket	m_socket;
 	QTimer		m_timer;
+	QTimer		m_requestTimer;
 	qint64		m_lastMod;
 	QString		m_addr;
 	int			m_port;

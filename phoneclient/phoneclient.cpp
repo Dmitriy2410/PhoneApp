@@ -5,21 +5,26 @@
 #include "../global.h"
 
 const int gc_interval = 1000;
+const int gc_timeoutInterval = 10000;
 
 PhoneClient::PhoneClient()
 {
 	m_timer.setInterval(gc_interval);
 	m_timer.setSingleShot(true);
+	m_requestTimer.setInterval(gc_timeoutInterval);
+	m_requestTimer.setSingleShot(true);
 	connect(&m_socket, SIGNAL(connected()),
 			this, SLOT(slotConnected()));
 	connect(&m_socket, SIGNAL(disconnected()),
-			this, SIGNAL(sigDisconnected()));
+			this, SLOT(slotDisconnected()));
 	connect(&m_socket, SIGNAL(readyRead()),
 			this, SLOT(slotReadyRead()));
 	connect(&m_socket, SIGNAL(error(QAbstractSocket::SocketError)),
 			this, SLOT(slotErrorHandler(QAbstractSocket::SocketError)));
 	connect(&m_timer, SIGNAL(timeout()),
 			this, SLOT(slotTimeout()));
+	connect(&m_requestTimer, SIGNAL(timeout()),
+			this, SLOT(slotReqTimeout()));
 	m_lastMod = 0;
 	QList<QHostAddress> addrs = QNetworkInterface::allAddresses();
 	QHostAddress addr = QHostAddress::LocalHost;
@@ -123,6 +128,7 @@ void PhoneClient::send(const QJsonObject &obj, const QByteArray &blob)
 	m_state = WaitRequest;
 	m_socket.write(ba);
 	m_socket.flush();
+	m_requestTimer.start();
 }
 
 void PhoneClient::slotConnected()
@@ -149,6 +155,12 @@ void PhoneClient::slotTimeout()
 	}
 }
 
+void PhoneClient::slotReqTimeout()
+{
+	// слишком долго нет ответа, переподключение
+	m_socket.disconnectFromHost();
+}
+
 void PhoneClient::setPort(int port)
 {
 	m_port = port;
@@ -168,12 +180,13 @@ void PhoneClient::updateConnection()
 		if (m_timer.isActive()) {
 			m_timer.stop();
 		}
-		m_timer.start();
 	}
+	m_timer.start();
 }
 
 void PhoneClient::slotReadyRead()
 {
+	m_requestTimer.start();
 	while(m_socket.bytesAvailable()) {
 		QByteArray ba = m_socket.readAll();
 		m_readBuffer.append(ba);
@@ -206,6 +219,7 @@ void PhoneClient::slotReadyRead()
 			m_blob = m_readBuffer.mid(4 + m_jsonSize, m_blob.size());
 			m_state = Ready;
 			m_waitState = WaitSize;
+			m_requestTimer.stop();
 			m_readBuffer.clear();
 		}
 		}
