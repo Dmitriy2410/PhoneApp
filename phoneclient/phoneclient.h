@@ -17,6 +17,7 @@ public:
 	};
 
 	PhoneClient();
+	~PhoneClient();
 
 	void setAddr(const QString &addr);
 	void setPort(int port);

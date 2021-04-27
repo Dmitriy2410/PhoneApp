@@ -56,7 +56,9 @@ bool DataJson::save()
 	}
 	QJsonDocument doc;
 	doc.setArray(arr);
-	f.write(doc.toJson());
+	if (f.write(doc.toJson()) == 0) {
+		return false;
+	}
 	return true;
 }
 

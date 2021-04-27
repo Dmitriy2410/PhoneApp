@@ -3,6 +3,11 @@
 
 #include <QString>
 
+enum Gender {
+	Male,
+	Female
+};
+
 enum DBState {
 	DBError = -1,
 	DBReady = 0
@@ -18,7 +23,7 @@ struct Record
 {
 	Record() {
 		id = -1;
-		gender = 0;
+		gender = Male;
 	}
 	int32_t	id;
 	char	surname[60];

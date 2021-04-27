@@ -8,13 +8,17 @@ RecordModel::RecordModel(QObject *parent) :
 
 int RecordModel::rowCount(const QModelIndex &parent) const
 {
-	Q_UNUSED(parent)
+	if (parent.isValid()) {
+		return 0;
+	}
 	return m_records.size();
 }
 
 int RecordModel::columnCount(const QModelIndex &parent) const
 {
-	Q_UNUSED(parent)
+	if (parent.isValid()) {
+		return 0;
+	}
 	return 3;
 }
 
@@ -48,7 +52,7 @@ QVariant RecordModel::data(const QModelIndex &index, int role) const
 		case 0:
 			return QString("%1 %2 %3").arg(rec.surname, rec.name, rec.secondName);
 		case 1:
-			return rec.gender == 0 ? tr("М") : tr("Ж");
+			return rec.gender == Male ? tr("М") : tr("Ж");
 		case 2:
 			return rec.phoneNumber;
 		}

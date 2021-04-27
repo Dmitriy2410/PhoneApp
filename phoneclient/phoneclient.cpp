@@ -5,7 +5,7 @@
 #include "../global.h"
 
 const int gc_interval = 1000;
-const int gc_timeoutInterval = 10000;
+const int gc_timeoutInterval = 15000;
 
 PhoneClient::PhoneClient()
 {
@@ -41,6 +41,13 @@ PhoneClient::PhoneClient()
 	m_socket.connectToHost(m_addr, m_port);
 	m_state = WaitRequest;
 	m_waitState = WaitSize;
+}
+
+PhoneClient::~PhoneClient()
+{
+	if (m_socket.state() == QAbstractSocket::ConnectedState) {
+		m_socket.abort();
+	}
 }
 
 void PhoneClient::getState()
