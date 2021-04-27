@@ -24,7 +24,8 @@ SOURCES += \
     mainwindow.cpp \
     phoneclient.cpp \
     recordmodel.cpp \
-    sortmodel.cpp
+    sortmodel.cpp \
+    utils.cpp
 
 HEADERS += \
     dianewrecord.h \
@@ -32,7 +33,8 @@ HEADERS += \
     mainwindow.h \
     phoneclient.h \
     recordmodel.h \
-    sortmodel.h
+    sortmodel.h \
+    utils.h
 
 FORMS += \
     dianewrecord.ui \

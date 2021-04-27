@@ -1,5 +1,5 @@
-#ifndef RECORD_H
-#define RECORD_H
+#ifndef GLOBAL_H
+#define GLOBAL_H
 
 #include <QString>
 
@@ -14,11 +14,9 @@ enum DBState {
 };
 enum ReadState {
 	WaitSize,
-	WaitDoc,
-	WaitBlob
+	WaitDoc
 };
 
-#pragma pack(push, 1)
 struct Record
 {
 	Record() {
@@ -26,12 +24,11 @@ struct Record
 		gender = Male;
 	}
 	int32_t	id;
-	char	surname[60];
-	char	name[60];
-	char	secondName[60];
+	QString	surname;
+	QString	name;
+	QString	secondName;
 	int8_t	gender;
-	char	phoneNumber[25];
+	QString	phoneNumber;
 };
-#pragma pack(pop)
 
-#endif // RECORD_H
+#endif // GLOBAL_H

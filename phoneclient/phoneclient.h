@@ -26,9 +26,9 @@ public:
 	void rmRecord(const QList<int> &ids);
 
 private:
-	void send(const QJsonObject &obj, const QByteArray &blob);
-	void requestHandler(const QJsonObject &obj, const QByteArray &blob);
-	void prepareDB(const QJsonObject &obj, const QByteArray &blob);
+	void send(const QJsonObject &obj);
+	void requestHandler(const QJsonObject &obj);
+	void prepareDB(const QJsonObject &obj);
 	void getData();
 	void updateConnection();
 
@@ -59,7 +59,6 @@ private:
 	qint32		m_jsonSize;
 	QByteArray	m_readBuffer;
 	QJsonObject	m_jsonObj;
-	QByteArray	m_blob;
 	int			m_waitState;
 };
 

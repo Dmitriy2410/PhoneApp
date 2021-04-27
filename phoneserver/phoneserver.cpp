@@ -83,24 +83,15 @@ void PhoneServer::slotReadyRead()
 			jsonDoc.resize(sData.m_jsonSize);
 			jsonDoc = sData.m_readBuffer.mid(4, sData.m_jsonSize);
 			sData.m_jsonObj = QJsonDocument::fromBinaryData(jsonDoc).object();
-			sData.m_blob.resize(sData.m_jsonObj["blobSize"].toInt(0));
-			sData.m_waitState = WaitBlob;
-		}
-		// fall through
-		case WaitBlob: {
-			if (sData.m_readBuffer.size() < (sData.m_jsonSize + 4 + sData.m_blob.size())) {
-				return;
-			}
-			sData.m_blob = sData.m_readBuffer.mid(4 + sData.m_jsonSize, sData.m_blob.size());
 			sData.m_waitState = WaitSize;
 			sData.m_readBuffer.clear();
 		}
 		}
 	}
-	prepareRequest(sock, sData.m_jsonObj, sData.m_blob);
+	prepareRequest(sock, sData.m_jsonObj);
 }
 
-void PhoneServer::prepareRequest(QTcpSocket *sock, const QJsonObject &obj, const QByteArray &blob)
+void PhoneServer::prepareRequest(QTcpSocket *sock, const QJsonObject &obj)
 {
 	QString cmd = obj["cmd"].toString();
 	if (cmd == "GetState") {
@@ -108,23 +99,17 @@ void PhoneServer::prepareRequest(QTcpSocket *sock, const QJsonObject &obj, const
 	} else if (cmd == "GetData") {
 		prepareGetData(sock);
 	} else if (cmd == "SetRecord") {
-		int id = obj["recId"].toInt(-1);
-		prepareSetRecord(sock, id, blob);
+		prepareSetRecord(sock, obj);
 	} else if (cmd == "AddRecord") {
-		prepareAddRecord(sock, blob);
+		prepareAddRecord(sock, obj);
 	} else if (cmd == "RmRecord") {
-		QJsonArray arr = obj["recIds"].toArray();
-		QList<int> ids;
-		for (int i = 0; i < arr.size(); ++i) {
-			ids.append(arr[i].toInt(-1));
-		}
-		prepareRmRecord(sock, ids);
+		prepareRmRecord(sock, obj);
 	} else {
 		// неизвестная команда
 		QJsonObject reqObj;
 		reqObj["cmd"] = cmd;
 		reqObj["State"] = DBError;
-		request(sock, reqObj, QByteArray());
+		request(sock, reqObj);
 	}
 }
 
@@ -134,87 +119,71 @@ void PhoneServer::prepareGetState(QTcpSocket *sock)
 	reqObj["cmd"] = "GetState";
 	reqObj["State"] = DBReady;
 	reqObj["LastMod"] = m_dataJson.lastModified();
-	request(sock, reqObj, QByteArray());
+	request(sock, reqObj);
 }
 
 void PhoneServer::prepareGetData(QTcpSocket *sock)
 {
 	QJsonObject reqObj;
-	QByteArray reqBlob;
-	QList<Record> recs = m_dataJson.records().values();
 	reqObj["cmd"] = "GetData";
 	reqObj["State"] = DBReady;
-	reqObj["RecSize"] = recs.size();
 	reqObj["LastMod"] = m_dataJson.lastModified();
-	reqBlob.resize(recs.size() * sizeof(Record));
-	QBuffer buf(&reqBlob);
-	buf.open(QIODevice::WriteOnly);
+	QList<QJsonObject> recs = m_dataJson.records().values();
+	QJsonArray arr;
 	for (int i = 0; i < recs.size(); ++i) {
-		if (buf.write((const char*)(&(recs[i])), sizeof(Record)) == 0) {
-			reqObj["State"] = DBError;
-			break;
-		}
+		arr.append(recs[i]);
 	}
-	buf.close();
-	reqObj["blobSize"] = reqBlob.size();
-	request(sock, reqObj, reqBlob);
+	reqObj["Data"] = arr;
+	request(sock, reqObj);
 }
 
-void PhoneServer::prepareSetRecord(QTcpSocket *sock, int id, const QByteArray &blob)
+void PhoneServer::prepareSetRecord(QTcpSocket *sock, const QJsonObject &obj)
 {
 	QJsonObject reqObj;
-	reqObj["cmd"] = "SetRecord";
-	QBuffer buf;
-	Record rec;
-	buf.setData(blob);
-	buf.open(QIODevice::ReadOnly);
-	if (buf.read((char*)(&rec), sizeof(rec)) != 0) {
-		bool ok = false;
-		m_dataJson.setRecord(id, rec);
-		if (id != -1) {
-			if (m_dataJson.save()) {
-				ok = true;
-			}
-		}
-		if (ok) {
-			reqObj["State"] = DBReady;
-		} else {
-			reqObj["State"] = DBError;
-			qDebug()<<"Edit record error!";
-		}
-	} else {
-		reqObj["State"] = DBError;
-	}
-	buf.close();
-	request(sock, reqObj, QByteArray());
-}
-
-void PhoneServer::prepareAddRecord(QTcpSocket *sock, const QByteArray &blob)
-{
-	QJsonObject reqObj;
-	QBuffer buf;
-	Record rec;
-	buf.setData(blob);
-	buf.open(QIODevice::ReadOnly);
-	if (buf.read((char*)(&rec), sizeof(rec)) != 0) {
-		m_dataJson.addRecord(rec);
+	reqObj["cmd"] = obj["cmd"].toString();
+	int id = obj["RecId"].toInt(-1);
+	QJsonObject rec = obj["Record"].toObject();
+	m_dataJson.setRecord(id, rec);
+	bool ok = false;
+	if (id != -1) {
 		if (m_dataJson.save()) {
-			reqObj["State"] = DBReady;
-		} else {
-			reqObj["State"] = DBError;
-			qDebug()<<"Record addition error!";
+			ok = true;
 		}
+	}
+	if (ok) {
+		reqObj["State"] = DBReady;
 	} else {
 		reqObj["State"] = DBError;
+		qDebug()<<"Edit record error!";
 	}
-	buf.close();
-	request(sock, reqObj, QByteArray());
+	request(sock, reqObj);
 }
 
-void PhoneServer::prepareRmRecord(QTcpSocket *sock, const QList<int> &ids)
+void PhoneServer::prepareAddRecord(QTcpSocket *sock, const QJsonObject &obj)
+{
+	QJsonObject reqObj;
+	reqObj["cmd"] = obj["cmd"].toString();
+	QJsonObject rec = obj["Record"].toObject();
+	m_dataJson.addRecord(rec);
+	if (m_dataJson.save()) {
+		reqObj["State"] = DBReady;
+	} else {
+		reqObj["State"] = DBError;
+		qDebug()<<"Record addition error!";
+	}
+	request(sock, reqObj);
+}
+
+void PhoneServer::prepareRmRecord(QTcpSocket *sock, const QJsonObject &obj)
 {
 	QJsonObject reqObj;
 	reqObj["State"] = DBReady;
+	reqObj["cmd"] = obj["cmd"].toString();
+	QJsonArray arr = obj["RecIds"].toArray();
+	QList<int> ids;
+	for (int i = 0; i < arr.size(); ++i) {
+		ids.append(arr[i].toInt(-1));
+	}
 	for (int i = 0; i < ids.size(); ++i) {
 		m_dataJson.rmRecord(ids[i]);
 	}
@@ -223,10 +192,10 @@ void PhoneServer::prepareRmRecord(QTcpSocket *sock, const QList<int> &ids)
 	} else {
 		reqObj["State"] = DBError;
 	}
-	request(sock, reqObj, QByteArray());
+	request(sock, reqObj);
 }
 
-void PhoneServer::request(QTcpSocket *sock, const QJsonObject &obj, const QByteArray &blob)
+void PhoneServer::request(QTcpSocket *sock, const QJsonObject &obj)
 {
 	QByteArray jsonData = QJsonDocument(obj).toBinaryData();
 	qint32 jsonSize = jsonData.size();
@@ -235,7 +204,6 @@ void PhoneServer::request(QTcpSocket *sock, const QJsonObject &obj, const QByteA
 	QDataStream stream(&ba, QIODevice::WriteOnly);
 	stream << jsonSize;
 	ba.append(jsonData);
-	ba.append(blob);
 	sock->write(ba);
 	sock->flush();
 }

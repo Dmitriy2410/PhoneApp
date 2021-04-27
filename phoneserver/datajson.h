@@ -4,6 +4,7 @@
 #include <QVector>
 #include "../global.h"
 #include <QHash>
+#include "QJsonObject"
 
 class DataJson
 {
@@ -13,15 +14,15 @@ public:
 	bool				load();
 	bool				save();
 
-	QHash<int, Record>	records() const;
-	void				setRecord(int id, const Record &rec);
-	void				addRecord(const Record &rec);
+	QHash<int, QJsonObject>	records() const;
+	void				setRecord(int id, const QJsonObject &rec);
+	void				addRecord(const QJsonObject &rec);
 	void				rmRecord(int id);
 	void				setFileName(const QString &fileName);
 	qint64				lastModified();
 
 private:
-	QHash<int, Record>	m_records;
+	QHash<int, QJsonObject>	m_records;
 	QString				m_fileName;
 };
 

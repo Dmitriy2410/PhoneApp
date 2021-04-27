@@ -34,10 +34,10 @@ Record DiaNewRecord::record()
 {
 	Record rec;
 	rec.gender = ui->comboBox->currentIndex();
-	sprintf(rec.surname, "%s", ui->le_surname->text().toStdString().c_str());
-	sprintf(rec.name, "%s", ui->le_name->text().toStdString().c_str());
-	sprintf(rec.secondName, "%s", ui->le_secondname->text().toStdString().c_str());
-	sprintf(rec.phoneNumber, "%s", ui->le_number->text().toStdString().c_str());
+	rec.surname = ui->le_surname->text();
+	rec.name = ui->le_name->text();
+	rec.secondName = ui->le_secondname->text();
+	rec.phoneNumber = ui->le_number->text();
 	return rec;
 }
 

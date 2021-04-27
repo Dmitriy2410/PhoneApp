@@ -18,7 +18,6 @@ struct SockData {
 	qint32		m_jsonSize;
 	QByteArray	m_readBuffer;
 	QJsonObject	m_jsonObj;
-	QByteArray	m_blob;
 	int			m_waitState;
 };
 
@@ -29,15 +28,15 @@ public:
 	PhoneServer();
 
 private:
-	void prepareRequest(QTcpSocket *sock, const QJsonObject &obj, const QByteArray &blob);
+	void prepareRequest(QTcpSocket *sock, const QJsonObject &obj);
 
 	void prepareGetState(QTcpSocket *sock);
 	void prepareGetData(QTcpSocket *sock);
-	void prepareSetRecord(QTcpSocket *sock, int id, const QByteArray &blob);
-	void prepareAddRecord(QTcpSocket *sock, const QByteArray &blob);
-	void prepareRmRecord(QTcpSocket *sock, const QList<int> &ids);
+	void prepareSetRecord(QTcpSocket *sock, const QJsonObject &obj);
+	void prepareAddRecord(QTcpSocket *sock, const QJsonObject &obj);
+	void prepareRmRecord(QTcpSocket *sock, const QJsonObject &obj);
 
-	void request(QTcpSocket *sock, const QJsonObject &obj, const QByteArray &blob);
+	void request(QTcpSocket *sock, const QJsonObject &obj);
 
 private slots:
 	void slotNewConnection();

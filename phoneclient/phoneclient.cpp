@@ -3,6 +3,7 @@
 #include <QTcpSocket>
 #include <QTimer>
 #include "../global.h"
+#include "utils.h"
 
 const int gc_interval = 1000;
 const int gc_timeoutInterval = 15000;
@@ -54,14 +55,14 @@ void PhoneClient::getState()
 {
 	QJsonObject obj;
 	obj["cmd"] = "GetState";
-	send(obj, QByteArray());
+	send(obj);
 }
 
 void PhoneClient::getData()
 {
 	QJsonObject obj;
 	obj["cmd"] = "GetData";
-	send(obj, QByteArray());
+	send(obj);
 }
 
 void PhoneClient::addRecord(const Record &rec)
@@ -72,16 +73,8 @@ void PhoneClient::addRecord(const Record &rec)
 	}
 	QJsonObject obj;
 	obj["cmd"] = "AddRecord";
-	QByteArray ba;
-	ba.resize(sizeof(rec));
-	QBuffer buf(&ba);
-	buf.open(QIODevice::WriteOnly);
-	if (buf.write((const char*)(&rec), sizeof(rec)) == 0) {
-		return;
-	}
-	buf.close();
-	obj["blobSize"] = ba.size();
-	send(obj, ba);
+	obj["Record"] = recToJson(rec);
+	send(obj);
 }
 
 void PhoneClient::setRecord(int id, const Record &rec)
@@ -92,17 +85,9 @@ void PhoneClient::setRecord(int id, const Record &rec)
 	}
 	QJsonObject obj;
 	obj["cmd"] = "SetRecord";
-	obj["recId"] = id;
-	QByteArray ba;
-	ba.resize(sizeof(rec));
-	QBuffer buf(&ba);
-	buf.open(QIODevice::WriteOnly);
-	if (buf.write((const char*)(&rec), sizeof(rec)) == 0) {
-		return;
-	}
-	buf.close();
-	obj["blobSize"] = ba.size();
-	send(obj, ba);
+	obj["RecId"] = id;
+	obj["Record"] = recToJson(rec);
+	send(obj);
 }
 
 void PhoneClient::rmRecord(const QList<int> &ids)
@@ -117,12 +102,12 @@ void PhoneClient::rmRecord(const QList<int> &ids)
 	for (int i = 0; i < ids.size(); ++i) {
 		arr.append(ids[i]);
 	}
-	obj["recIds"] = arr;
-	send(obj, QByteArray());
+	obj["RecIds"] = arr;
+	send(obj);
 }
 
 
-void PhoneClient::send(const QJsonObject &obj, const QByteArray &blob)
+void PhoneClient::send(const QJsonObject &obj)
 {
 	QByteArray jsonData = QJsonDocument(obj).toBinaryData();
 	qint32 jsonSize = jsonData.size();
@@ -131,7 +116,6 @@ void PhoneClient::send(const QJsonObject &obj, const QByteArray &blob)
 	QDataStream stream(&ba, QIODevice::WriteOnly);
 	stream << jsonSize;
 	ba.append(jsonData);
-	ba.append(blob);
 	m_state = WaitRequest;
 	m_socket.write(ba);
 	m_socket.flush();
@@ -215,15 +199,6 @@ void PhoneClient::slotReadyRead()
 			jsonDoc.resize(m_jsonSize);
 			jsonDoc = m_readBuffer.mid(4, m_jsonSize);
 			m_jsonObj = QJsonDocument::fromBinaryData(jsonDoc).object();
-			m_blob.resize(m_jsonObj["blobSize"].toInt(0));
-			m_waitState = WaitBlob;
-		}
-		// fall through
-		case WaitBlob: {
-			if (m_readBuffer.size() < (m_jsonSize + 4 + m_blob.size())) {
-				return;
-			}
-			m_blob = m_readBuffer.mid(4 + m_jsonSize, m_blob.size());
 			m_state = Ready;
 			m_waitState = WaitSize;
 			m_requestTimer.stop();
@@ -231,10 +206,10 @@ void PhoneClient::slotReadyRead()
 		}
 		}
 	}
-	requestHandler(m_jsonObj, m_blob);
+	requestHandler(m_jsonObj);
 }
 
-void PhoneClient::requestHandler(const QJsonObject &obj, const QByteArray &blob)
+void PhoneClient::requestHandler(const QJsonObject &obj)
 {
 	if (obj["State"].toInt(DBError) == DBError) {
 		m_timer.start();
@@ -247,7 +222,7 @@ void PhoneClient::requestHandler(const QJsonObject &obj, const QByteArray &blob)
 			getData();
 		}
 	} else if (cmd == "GetData") {
-		prepareDB(obj, blob);
+		prepareDB(obj);
 	} else if (cmd == "SetRecord" ||
 			   cmd == "AddRecord" ||
 			   cmd == "RmRecord") {
@@ -258,22 +233,14 @@ void PhoneClient::requestHandler(const QJsonObject &obj, const QByteArray &blob)
 	m_timer.start();
 }
 
-void PhoneClient::prepareDB(const QJsonObject &obj, const QByteArray &blob)
+void PhoneClient::prepareDB(const QJsonObject &obj)
 {
-	QBuffer buf;
 	m_lastMod = obj["LastMod"].toInt();
-	int recSize = obj["RecSize"].toInt();
-	buf.setData(blob);
-	buf.open(QIODevice::ReadOnly);
+	QJsonArray arr = obj["Data"].toArray();
 	QList<Record> recs;
-	for (int i = 0; i < recSize; ++i) {
-		Record rec;
-		if (buf.read((char*)(&rec), sizeof(rec)) == 0) {
-			return;
-		}
-		recs << rec;
+	for (int i = 0; i < arr.size(); ++i) {
+		recs << jsonToRec(arr[i].toObject());
 	}
-	buf.close();
 	emit sigDBUpdated(recs);
 }
 

@@ -22,15 +22,9 @@ bool DataJson::load()
 	QByteArray ba = f.readAll();
 	QJsonArray arr = QJsonDocument::fromJson(ba).array();
 	for (int i = 0; i < arr.size(); ++i) {
-		Record rec;
 		QJsonObject obj = arr[i].toObject();
-		rec.id = obj["id"].toInt();
-		sprintf(rec.surname, "%s", obj["surname"].toString().toStdString().c_str());
-		sprintf(rec.name, "%s", obj["name"].toString().toStdString().c_str());
-		sprintf(rec.secondName, "%s", obj["secondName"].toString().toStdString().c_str());
-		sprintf(rec.phoneNumber, "%s", obj["phoneNumber"].toString().toStdString().c_str());
-		rec.gender = obj["gender"].toInt();
-		m_records[rec.id] = rec;
+		int id = obj["id"].toInt();
+		m_records[id] = obj;
 	}
 	return true;
 }
@@ -42,17 +36,9 @@ bool DataJson::save()
 		return false;
 	}
 	QJsonArray arr;
-	QList<Record> recs = m_records.values();
+	QList<QJsonObject> recs = m_records.values();
 	for (int i = 0; i < recs.size(); ++i) {
-		Record rec = recs[i];
-		QJsonObject obj;
-		obj["id"] = rec.id;
-		obj["surname"] = QString(rec.surname);
-		obj["name"] = QString(rec.name);
-		obj["secondName"] = QString(rec.secondName);
-		obj["gender"] = rec.gender;
-		obj["phoneNumber"] = QString(rec.phoneNumber);
-		arr.append(obj);
+		arr.append(recs[i]);
 	}
 	QJsonDocument doc;
 	doc.setArray(arr);
@@ -62,31 +48,31 @@ bool DataJson::save()
 	return true;
 }
 
-QHash<int, Record> DataJson::records() const
+QHash<int, QJsonObject> DataJson::records() const
 {
 	return m_records;
 }
 
-void DataJson::setRecord(int id, const Record &rec)
+void DataJson::setRecord(int id, const QJsonObject &rec)
 {
 	if (id == -1) {
 		return;
 	}
-	Record nRec = rec;
-	nRec.id = id;
+	QJsonObject nRec = rec;
+	nRec["id"] = id;
 	m_records[id] = nRec;
 	qDebug()<<"Set record - id:"<<id;
 }
 
-void DataJson::addRecord(const Record &rec)
+void DataJson::addRecord(const QJsonObject &rec)
 {
-	Record nRec = rec;
+	QJsonObject nRec = rec;
 	int newId = 0;
 	QList<int> keys = m_records.keys();
 	while (keys.contains(newId)) {
 		++newId;
 	}
-	nRec.id = newId;
+	nRec["id"] = newId;
 	m_records[newId] = nRec;
 	QString out = QString("Add record - id = %1, records count = %2")
 			.arg(newId)
